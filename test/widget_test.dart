@@ -25,23 +25,49 @@ void main() {
     expect(find.text('Firebase: no configurado (modo local)'), findsOneWidget);
   });
 
-  testWidgets('el botón de tema alterna MaterialApp a modo oscuro', (
+  testWidgets('el botón de tema recorre sistema, claro y oscuro', (
     tester,
   ) async {
+    // 1. Construir Wallet UNSAAC.
     await tester.pumpWidget(
       const WalletApp(firebaseStatus: FirebaseStatus.notConfigured()),
     );
+
     await tester.pumpAndSettle();
 
-    MaterialApp app() =>
-        tester.widget<MaterialApp>(find.byType(MaterialApp));
+    // Obtener el MaterialApp actual.
+    MaterialApp app() => tester.widget<MaterialApp>(find.byType(MaterialApp));
 
+    // Localizar el botón de cambio de tema.
+    final themeButton = find.byKey(const Key('theme_cycle_button'));
+
+    // 2. Verificar el modo inicial.
     expect(app().themeMode, ThemeMode.system);
 
-    await tester.tap(find.byTooltip('Activar tema oscuro'));
+    expect(find.byTooltip('Tema del sistema. Cambiar a claro'), findsOneWidget);
+
+    // 3. Primer toque: Sistema → Claro.
+    await tester.tap(themeButton);
+    await tester.pumpAndSettle();
+
+    expect(app().themeMode, ThemeMode.light);
+
+    expect(find.byTooltip('Tema claro. Cambiar a oscuro'), findsOneWidget);
+
+    // 4. Segundo toque: Claro → Oscuro.
+    await tester.tap(themeButton);
     await tester.pumpAndSettle();
 
     expect(app().themeMode, ThemeMode.dark);
-    expect(find.byTooltip('Activar tema claro'), findsOneWidget);
+
+    expect(find.byTooltip('Tema oscuro. Cambiar a sistema'), findsOneWidget);
+
+    // 5. Tercer toque: Oscuro → Sistema.
+    await tester.tap(themeButton);
+    await tester.pumpAndSettle();
+
+    expect(app().themeMode, ThemeMode.system);
+
+    expect(find.byTooltip('Tema del sistema. Cambiar a claro'), findsOneWidget);
   });
 }

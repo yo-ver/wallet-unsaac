@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:wallet_unsaac/core/config/firebase_status.dart';
 import 'package:wallet_unsaac/core/theme/theme_cubit.dart';
-import 'package:wallet_unsaac/features/wallet/domain/entities/wallet_summary.dart';
-import 'package:wallet_unsaac/features/wallet/domain/repositories/wallet_repository.dart';
+import 'package:wallet_unsaac/core/theme/theme_state.dart';
+
+import 'package:wallet_unsaac/features/wallet/presentation/cubits/balance_cubit.dart';
+import 'package:wallet_unsaac/features/wallet/presentation/cubits/balance_state.dart';
+
 import 'package:wallet_unsaac/features/wallet/presentation/widgets/balance_card.dart';
 import 'package:wallet_unsaac/features/wallet/presentation/widgets/firebase_status_card.dart';
 import 'package:wallet_unsaac/features/wallet/presentation/widgets/movement_tile.dart';
+
+import 'package:wallet_unsaac/features/wallet/presentation/cubits/privacy_cubit.dart';
+import 'package:wallet_unsaac/features/wallet/presentation/cubits/privacy_state.dart';
+
+import 'package:wallet_unsaac/core/theme/seed_color_picker.dart';
 
 /// Pantalla principal de Wallet UNSAAC (Sesión 1).
 ///
@@ -23,23 +31,19 @@ class WalletHomePage extends StatefulWidget {
 }
 
 class _WalletHomePageState extends State<WalletHomePage> {
-  late Future<WalletSummary> _summaryFuture;
-
   @override
   void initState() {
     super.initState();
-    _summaryFuture = context.read<WalletRepository>().loadSummary();
+
+    // Iniciar la carga del resumen financiero mediante el Cubit.
+    context.read<BalanceCubit>().loadBalance();
   }
 
+  /// Actualiza el resumen financiero mediante BalanceCubit.
+  ///
+  /// Se utiliza desde RefreshIndicator.
   Future<void> _reload() async {
-    final future = context.read<WalletRepository>().loadSummary();
-    setState(() => _summaryFuture = future);
-    try {
-      await future;
-    } on Exception {
-      // El estado de error se representa en la interfaz; aquí solo se evita
-      // que el RefreshIndicator propague la excepción.
-    }
+    await context.read<BalanceCubit>().refresh();
   }
 
   void _showComingSoon(String feature) {
@@ -56,8 +60,6 @@ class _WalletHomePageState extends State<WalletHomePage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
@@ -75,30 +77,103 @@ class _WalletHomePageState extends State<WalletHomePage> {
           ],
         ),
         actions: [
+          // Botón para personalizar el color de Wallet UNSAAC.
           IconButton(
-            tooltip: isDark ? 'Activar tema claro' : 'Activar tema oscuro',
-            icon: Icon(
-              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-            ),
-            onPressed: () => context.read<ThemeCubit>().toggle(),
+            key: const Key('seed_color_picker_button'),
+
+            tooltip: 'Personalizar colores',
+
+            icon: const Icon(Icons.palette_outlined),
+
+            onPressed: () {
+              // Obtener la instancia actual de ThemeCubit.
+              final themeCubit = context.read<ThemeCubit>();
+
+              // Abrir el selector en un panel inferior.
+              showModalBottomSheet<void>(
+                context: context,
+
+                // Permitir que el panel utilice más espacio vertical.
+                isScrollControlled: true,
+
+                showDragHandle: true,
+
+                builder: (bottomSheetContext) {
+                  return BlocProvider.value(
+                    value: themeCubit,
+                    child: const SeedColorPicker(),
+                  );
+                },
+              );
+            },
+          ),
+          BlocBuilder<ThemeCubit, ThemeState>(
+            builder: (context, state) {
+              // Obtener el modo de tema actual.
+              final mode = state.mode;
+
+              // Seleccionar el icono según el modo actual.
+              final IconData icon;
+
+              // Texto accesible que describe el modo y la siguiente acción.
+              final String tooltip;
+
+              switch (mode) {
+                case ThemeMode.light:
+                  icon = Icons.light_mode_outlined;
+                  tooltip = 'Tema claro. Cambiar a oscuro';
+                  break;
+
+                case ThemeMode.dark:
+                  icon = Icons.dark_mode_outlined;
+                  tooltip = 'Tema oscuro. Cambiar a sistema';
+                  break;
+
+                case ThemeMode.system:
+                  icon = Icons.brightness_auto_outlined;
+                  tooltip = 'Tema del sistema. Cambiar a claro';
+                  break;
+              }
+
+              return IconButton(
+                key: const Key('theme_cycle_button'),
+                tooltip: tooltip,
+                icon: Icon(icon),
+
+                // Cambiar al siguiente modo y guardar la preferencia.
+                onPressed: () {
+                  context.read<ThemeCubit>().cycleMode();
+                },
+              );
+            },
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: FutureBuilder<WalletSummary>(
-        future: _summaryFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      body: BlocBuilder<BalanceCubit, BalanceState>(
+        builder: (context, balanceState) {
+          // ESTADO INICIAL Y DE CARGA
+          if (balanceState is BalanceInitial ||
+              balanceState is BalanceLoading) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
+
+          // ESTADO DE ERROR
+          if (balanceState is BalanceFailure) {
             return _ErrorView(
-              message: 'No se pudo cargar el resumen de la billetera.',
-              onRetry: _reload,
+              message: balanceState.message,
+
+              // Reintentar la consulta mediante el Cubit.
+              onRetry: () {
+                return context.read<BalanceCubit>().retry();
+              },
             );
           }
 
-          final summary = snapshot.data!;
+          // ESTADO DE ÉXITO
+          final summary = (balanceState as BalanceSuccess).summary;
+
+          // Mostrar el resumen financiero y permitir actualizarlo.
           return RefreshIndicator(
             onRefresh: _reload,
             child: ListView(
@@ -116,7 +191,22 @@ class _WalletHomePageState extends State<WalletHomePage> {
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 20),
-                BalanceCard(summary: summary),
+                // Reconstruir la tarjeta cuando cambia la privacidad.
+                BlocBuilder<PrivacyCubit, PrivacyState>(
+                  builder: (context, privacyState) {
+                    return BalanceCard(
+                      summary: summary,
+
+                      // Indicar si los importes deben ocultarse.
+                      hideBalance: privacyState.isHidden,
+
+                      // Cambiar la privacidad al pulsar el botón del ojo.
+                      onToggleVisibility: () {
+                        context.read<PrivacyCubit>().toggle();
+                      },
+                    );
+                  },
+                ),
                 const SizedBox(height: 20),
                 Row(
                   children: [
@@ -159,7 +249,18 @@ class _WalletHomePageState extends State<WalletHomePage> {
                   const _EmptyMovements()
                 else
                   for (final movement in summary.movements) ...[
-                    MovementTile(movement: movement),
+                    // Escuchar los cambios de privacidad.
+                    BlocBuilder<PrivacyCubit, PrivacyState>(
+                      builder: (context, privacyState) {
+                        return MovementTile(
+                          movement: movement,
+
+                          // Ocultar o mostrar el importe según el estado.
+                          hideAmount: privacyState.isHidden,
+                        );
+                      },
+                    ),
+
                     const SizedBox(height: 10),
                   ],
                 const SizedBox(height: 12),

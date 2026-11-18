@@ -1,28 +1,52 @@
 import 'package:flutter/material.dart';
 
-/// Tema visual de Wallet UNSAAC.
+/// Configuración visual de Wallet UNSAAC.
 ///
-/// Se construye con Material 3 y un color semilla institucional (granate
-/// UNSAAC). `ColorScheme.fromSeed` deriva todos los roles de color para los
-/// modos claro y oscuro, de modo que no se codifican colores sueltos en las
-/// pantallas.
+/// Utiliza Material 3 y ColorScheme.fromSeed para generar
+/// paletas de colores adaptadas a los modos claro y oscuro.
+///
+/// El color semilla puede cambiar dinámicamente mediante ThemeCubit.
 abstract final class AppTheme {
+  /// Color institucional predeterminado de Wallet UNSAAC.
   static const Color seed = Color(0xFF7A1F2B);
 
-  static ThemeData light() => _build(Brightness.light);
+  /// Genera el tema claro a partir del color semilla.
+  ///
+  /// Si no se proporciona un color, utiliza el granate institucional.
+  static ThemeData light({Color seedColor = seed}) {
+    return _build(brightness: Brightness.light, seedColor: seedColor);
+  }
 
-  static ThemeData dark() => _build(Brightness.dark);
+  /// Genera el tema oscuro a partir del color semilla.
+  ///
+  /// Si no se proporciona un color, utiliza el granate institucional.
+  static ThemeData dark({Color seedColor = seed}) {
+    return _build(brightness: Brightness.dark, seedColor: seedColor);
+  }
 
-  static ThemeData _build(Brightness brightness) {
+  /// Construye un ThemeData utilizando Material 3.
+  ///
+  /// ColorScheme.fromSeed genera una paleta de colores
+  /// coherente según el color semilla y el brillo seleccionado.
+  static ThemeData _build({
+    required Brightness brightness,
+    required Color seedColor,
+  }) {
     final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
+      seedColor: seedColor,
       brightness: brightness,
     );
 
     return ThemeData(
       useMaterial3: true,
+
+      // Esquema de colores generado dinámicamente.
       colorScheme: scheme,
+
+      // Color de fondo de la pantalla.
       scaffoldBackgroundColor: scheme.surface,
+
+      // Configuración de la barra superior.
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
@@ -30,14 +54,16 @@ abstract final class AppTheme {
         elevation: 0,
         scrolledUnderElevation: 1,
       ),
+
+      // Configuración de las tarjetas.
       cardTheme: CardThemeData(
         elevation: 0,
         margin: EdgeInsets.zero,
         color: scheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+
+      // Configuración de los botones principales.
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(48),
@@ -46,6 +72,8 @@ abstract final class AppTheme {
           ),
         ),
       ),
+
+      // Configuración de las notificaciones.
       snackBarTheme: const SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
       ),
